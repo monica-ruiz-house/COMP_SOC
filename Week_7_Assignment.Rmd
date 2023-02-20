@@ -10,8 +10,9 @@ output: word_document
 1.  Load in the New York Times and Breitbart text files that we used for last week's assignment. Combine the two data frames using the row bind function "rbind()" so that they are in the same data frame. Remove stopwords using the script included below. Assign each article a unique article number.
 
 ```{r}
-
-
+# Load necessary libraries 
+library(tidyverse)
+working_dr 
 library("stopwords")
 stopwords<-stopwords(language ="en", source = "smart")
 
