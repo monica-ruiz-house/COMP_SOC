@@ -12,7 +12,12 @@ output: word_document
 ```{r}
 # Load necessary libraries 
 library(tidyverse)
-working_dr 
+working_dr <- getwd()
+breitbart <- read_csv(paste0(working_dr, "/download-2.html"))
+ny_times <- read_csv(paste0(working_dr, "/download.html"))
+```
+
+``` {r}
 library("stopwords")
 stopwords<-stopwords(language ="en", source = "smart")
 
