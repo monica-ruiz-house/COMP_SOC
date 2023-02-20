@@ -11,6 +11,7 @@ output: word_document
 
 ```{r}
 
+
 library("stopwords")
 stopwords<-stopwords(language ="en", source = "smart")
 
