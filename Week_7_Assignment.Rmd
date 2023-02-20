@@ -7,7 +7,7 @@ output: word_document
 
 **Thank you so much for the extension! I have started saving my files on git, so if someone happens to break my laptop again, I have all my work saved in the cloud.**
 
-1.  Load in the New York Times and Breitbart text files that we used for last week's assignment. Combine the two data frames using the row bind function "rbind()" so that they are in the same dataframe. Remove stopwords using the script included below. Assign each article a unique article number.
+1.  Load in the New York Times and Breitbart text files that we used for last week's assignment. Combine the two data frames using the row bind function "rbind()" so that they are in the same data frame. Remove stopwords using the script included below. Assign each article a unique article number.
 
 ```{r}
 
