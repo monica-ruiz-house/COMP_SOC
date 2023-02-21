@@ -1,0 +1,198 @@
+---
+title: 'Advanced Text Analysis: Topic Models'
+author: "Austin Kozlowski"
+date: "2023-02-13"
+output: html_document
+---
+
+# Advanced Text Analysis: Topic Models
+
+Last week we learned the two fundamentals of text analysis: analyses of frequency and analyses of context. This week we are going to learn two methods that provide more comprehensive information about frequency and/or context. Today we will focus on Topic Models.
+
+Let's suppose you are working with a large collection of documents. Maybe they are newspaper articles, or notes taken at an organization's meetings, or the open-ended responses to a survey. We want to discover some of the main topics that are discussed in these documents. Moreover, we may want to see which documents discuss which topics so we can see whether topics change over time or differ between authors.
+
+Last week we gained some sense of topics by looking at word frequencies -- for instance, we found that "border" and "police" came up in Breitbart more than in the New York Times. But looking only at single words limits our understanding of topics. For instance, just counting the word "border" may not be as effective as looking at a whole collection of words, like "mexico", "immigration", etc.
+
+Ideally, we would like to find collections of words that go together (topics) and then quantify the prevalence of these topics across documents. This is exactly what a topic model does.
+
+Topic models treat documents as a "bag-of-words", meaning that sequence, ordering, and syntax are ignored.
+
+A topic model takes as its input a set of documents and discovers a set of "topics" by grouping together words that disproportionately co-occur.
+
+For each topic:
+
+-   Each **word** has a score indicating how much it is associated with that topic (*beta*).
+
+-   Each **document** has a score indicating the probability that it includes that topic (*gamma*).
+
+Here is an illustration representing topic modeling for a collection of articles about science. On the left, we see that there are 4 topics that occur in the corpus. For each topic, we see the top few words associated with the topic. Then in the text, we see that the words associated with the different topics highlighted in the respective colors. The quantities of these words are then used to estimate the probability of each topics being present in the document.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/topic_model_example.png)In this illustration of a topic model, we see that 4 topics have been identified -- the first one pertains to genetics ("gene","dna","genetic"), the second to biology ("life","evolve","organism"), the third neuroscience, and the fourth computer science.
+
+Below we see an example of the results of a topic model that has been applied to a collection of news articles. This given article shows all four of the following topics.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/topic_model_example2.png)
+
+Without further ado, we let's try making some topic models ourselves. Let's begin by loading in the New York Times file, along with the packages we use for text analysis:
+
+```{r}
+library("dplyr")      #includes count() function
+library("stopwords")  #includes stopwords lists
+library("tidytext")   #includes unnest_tokens() function
+library("ggplot2")    #used for visualization
+
+nyt<-read.csv("Z:/Winter_2023/Intro_to_Comp_Soc/Week_6/nytimes_1000.txt",header=FALSE)
+
+nyt$article<-rownames(nyt)
+colnames(nyt)<-c("text","article")
+View(nyt)
+```
+
+Now let's remove stop words.
+
+```{r}
+stopwords<-stopwords(language ="en", source = "smart")
+stopwords<-append(stopwords,c("mr","ms"))
+
+#Define new "not in" function#
+'%nin%' <- Negate('%in%')
+
+#input list of full texts
+list_of_texts<-nyt[,1]
+
+#Break text into words, remove stop words, then reassemble#
+nyt$text<- lapply(list_of_texts, function(x) { 
+                      t <- unlist(strsplit(x, " "))
+                      wordlist<- t[t %nin% stopwords]
+                      paste(wordlist, collapse = ' ')
+                       })
+
+View(nyt)
+```
+
+The input for a Topic Model is a Document-Term matrix. This is different from the one-word-per-line format we have been using so far. Instead, we make a matrix where the rows are documents and the columns are words. The cells will indicate the frequency of the word's occurrence within that document.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/dtm.png){width="480"}
+
+To create the document-term matrix, we first want to calculate frequencies for each document. We can do this with the count() command, specifying to group by the "article" column.
+
+```{r}
+nyt_wpl<- unnest_tokens(tbl=nyt,
+                        input=text,
+                          output=word, 
+                          token='words')
+
+View(nyt_wpl)
+
+#   count(dataframe, grouping, column to calculate frequencies)
+nyt_freq<-count(nyt_wpl, article, word)
+View(nyt_freq)
+```
+
+We now use the cast_dtm() command from tidytext to turn the frequency table into a data-term matrix. Unfortunately, it is stored in an efficient form that does not allow you to View() the matrix.
+
+```{r}
+#cast_dtm(data, document, term, value, 
+
+nyt_dtm <- cast_dtm(data = nyt_freq,
+                    document = article,
+                    term = word,
+                    value = n)
+
+nyt_dtm
+```
+
+Now that we have a document-term matrix, we can run the topic model. There are few ways to calculate topic models. Some use a dimension reduction approach like we did in Week 3, reducing the columns from n = the vocabulary size to a few "topic" dimensions. However, the most popular approach uses a statistical model called Latent Dirichlet Allocation (LDA).
+
+```{r}
+#install.packages("topicmodels")
+library("topicmodels")
+#install.packages("reshape2")
+library("reshape2")
+
+
+###       LDA( dtm matrix , k = number of topics)
+nyt_lda <- LDA(nyt_dtm, k = 6, control = list(seed = 1234))
+nyt_lda
+
+# By setting a seed value, we make our results reproducible
+# Otherwise, the random element in the topic model algorithm may lead to slight variations in results.
+```
+
+We can use the "tidy" command from the tidyr library to turn the LDA output back into a matrix. We can create either topic scores for words (beta) or topic scores for documents (gamma).
+
+```{r}
+options(scipen=50)  #can be used to remove scientific notation
+
+## The Beta statistic gives topic scores for each word
+# Words have a score for each topic indicating its association with that topic
+
+nyt_word_topics <- tidy(nyt_lda, matrix = "beta")
+View(nyt_word_topics)
+
+## The Gamma statistic gives topic scores for each document
+# Docs have a score for each topic indicating the presence of that topic
+
+nyt_doc_topics <- tidy(nyt_lda, matrix = "gamma")
+View(nyt_doc_topics)
+View(arrange(nyt_doc_topics,document))
+
+```
+
+Here's a little script borrowed from [our readings](https://www.tidytextmining.com/topicmodeling.html) that displays the top 7 words for each topic.
+
+```{r}
+library(ggplot2)
+
+top_terms <- nyt_word_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 7) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  theme(strip.text.x = element_text(size = 7))
+```
+
+This gives us a nice overview, but what if we wanted to take a closer look at the top words for a given topic? How could we just look at a single topic?
+
+```{r}
+#Subset the data to just rows where "topic" is equal to 5
+single_topic<-subset(nyt_word_topics,topic==5)
+View(arrange(single_topic,-1*beta))
+```
+
+What if we want to see the distribution of topics within a single document?
+
+```{r}
+#Subset data to just rows where "document" is equal to 333
+single_doc<-subset(nyt_doc_topics,document==333)
+View(single_doc)
+```
+
+Lastly, suppose we want to look at the overall prevalence of the topics across all the documents. One easy way to do this is just to calculate the mean gamma for each topic across all documents. Because we want to calculate the means by groups (for each topic), we need to use the aggregate() base R function.
+
+```{r}
+#aggregate(df$col_to_aggregate, list(df$col_to_group_by), FUN=mean) 
+topic_means<-aggregate(nyt_doc_topics$gamma, list(nyt_doc_topics$topic), FUN=mean)
+
+View(topic_means)
+ggplot(topic_means, aes(x=Group.1,y=x))+
+  geom_col()
+```
+
+## Lab Session
+
+Suppose we wanted to compare the topic distributions between two periodicals. How would we do that?
+
+1.  Load in Breitbart text
+2.  "rbind" to merge vertically your data frames
+3.  Remove stop words
+4.  run LDA =() topic model command
+5.  subset to get only the rows for a single periodical
+6.  Calculate distribution of topics as above using aggregate()

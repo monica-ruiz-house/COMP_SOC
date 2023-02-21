@@ -1,0 +1,263 @@
+---
+title: "Text Analysis Intro"
+author: "Austin Kozlowski"
+date: "2023-02-03"
+output: html_document
+---
+
+# Introduction to Text Analysis: Word Frequencies
+
+For centuries, text has been a crucial source of data for analysts of history, culture, and society. But until recently, text analysis was almost exclusively a qualitative, interpretive exercise in deep reading. Yet with the advent of computers and the rapidly growing availability of digitized texts, quantitative analysis of large collections of documents (called a "corpus," or plural "corpora") has become widespread. This form of analysis is commonly called *quantitative content analysis*, which is under the broader umbrella of *Natural Language Processing* (NLP). But how do we turn text into data? And how exactly can we analyze this data?
+
+**There are many kinds of text we may want to analyze:**
+
+-   Court transcripts
+
+-   Legal documents
+
+-   Financial reports
+
+-   Political statements (politicians, state of the union)
+
+-   Twitter, social media
+
+-   Books, novels, stories
+
+-   News
+
+-   Scientific Articles
+
+**Things we may want to extract from text:**
+
+-   Frequencies
+
+-   Connotations
+
+-   Pairings of words
+
+-   Themes, topics
+
+-   Relations between actors in a network (in a conversation)
+
+Let's begin by installing and loading in the libraries we will need (remove the \# from the install lines for any packages you have not installed yet. Then add the hash back so you do not attempt to reinstall every time)
+
+```{r}
+#install.packages("dplyr")
+#install.packages('gutenbergr')
+#install.packages("stringr")
+#install.packages("tidytext")
+#install.packages("stopwords")
+
+##dplyr is a basic R library that provides functions for working with dataframes.
+library("dplyr")
+
+##guntenbergr provides an easy way of pulling texts from Project Gutenberg.
+library('gutenbergr')
+
+##stringr provides some useful functions for working with "strings" which are data comprised of letters, like words.
+library('stringr')
+
+##tidytext provides functions that make it easier to turn text into structured data.
+library("tidytext")
+
+## "stopwords" are words that convey syntax but little semantic content, such as "is" or "the". This library provides lists of stopwords so we can filter them out.
+library("stopwords")
+library("ggplot2")
+```
+
+*Note: The readings for this week, Chapters 1 through 4 in [Text Mining with R](https://www.tidytextmining.com/tidytext.html) are very relevant, but their examples often use a format that I tend to avoid. Specifically they use the "pipe" operation, %\>%. If you are applying several functions to a data object, the pipe is a way of avoiding nesting many functions and avoiding creating many intermediary data objects. The pipe takes the object at the beginning of the line and sequentially feeds it through functions moving right. So instead of reading inside-to-outside, you read left-to-right.*
+
+```{r}
+## Taking the sine of 3.14 with using the pipe and with conventional syntax.
+3.14 %>% sin()
+sin(3.14)
+
+## Taking sine, then cosine, of 3.14.
+3.14 %>% sin() %>% cos()
+cos(sin(3.14))
+
+```
+
+## Loading in Text
+
+Although massive amounts of digitized text exists, there are ongoing battles about what can be legally scraped form the internet. At the moment, [courts are upholding the right to scrape information that does not require authorization to access](https://techcrunch.com/2022/04/18/web-scraping-legal-court/). There are still questions about copyrighted data and what does and does not constitute "[fair use](https://www.copyright.gov/fair-use/)," but you're definitely in the clear if you're analyzing something in the public domain. In this spirit, for our first demonstrations we will use texts from Project Gutenberg, a vast online repository of public domain texts.
+
+Given that this is a social science course, we will analyze some works of classical social theory. Let's start by pulling the full text of The Communist Manifesto. [Finding its entry on Project Gutenberg](https://www.gutenberg.org/ebooks/61), we see that it's ID number is 61. We input this into the gutenberg_download function from the gutenbergr library to pull the full text.
+
+```{r}
+marx <- gutenberg_download(61)
+View(marx[10:105,])
+```
+
+Note that we have two columns: "gutenberg_id" and "text". Each row of the data frame is a line from the book. What are some issues with the text as it is structured currently? How might we want to "preprocess", or clean up the text?
+
+## Structuring Text as Data
+
+The "text" column is full of useful information -- it contains the full text of the book -- but it is broken up so each row is one line. This means some rows contain no text, and some contain many words. It will be much easier to work with this book if each row contained one word. We use a function from the "tidytext" library to achieve this in one line.
+
+```{r}
+## unnest_tokens(tbl    = your input data frame
+##               input  = the column name of your input from the tbl dataframe
+##               output = the column name for your output)
+
+cm_word_per_line <- unnest_tokens(tbl=marx, input=text, output=word, token="words")
+View(cm_word_per_line)
+```
+
+Much better! Now we can perform all kinds of quantitative operations on our data. Importantly, we can begin to assign new columns that serve as attributes of the words. For instance, we could label parts of speech (noun, verb, adjective, etc.), we could use a "sentiment analysis" library to assign each word a positive or negative connotation score, and so on.
+
+Having one word in each row also makes it easier to do things like calculate frequencies. We can use the "count()" command from the "dplyr' library to do so."count()" could be used in conventional data frames to do something like count the frequency of respondents with Race = Asian vs. Race = White or Race = Black. But for this case, it calculates the frequency of word = "the" or word = "of", for example.
+
+```{r}
+## count( dataframe , column of dataframe , sort in order of frequency)
+count(cm_word_per_line, word, sort = TRUE)
+```
+
+## Removing "Stopwords"
+
+Scrolling through the first thirty rows or so, we find a lot of terms that are clearly distinct to the Communist Manifesto -- "class," "bourgeoisie," "property." But there are also a bunch of words that are just very common in the English language: the, of, and, etc.
+
+These words that convey little semantic (meaning) information are called "stop words." It is common practice in text analysis to simply remove them. Of course, there are different ways of defining what counts as a stop word -- some lists have thousands, others only a hundred.
+
+The "stopwords" function from the "stopwords" library provides many lists of stopwords. We will use the NLTK list because it is short and therefore it probably won't remove any words that might be important.
+
+```{r}
+nltk_stopwords<-stopwords(language ="en", source = "nltk")
+nltk_stopwords
+```
+
+Next, we use the subset() command to remove all rows in cm_word_per_line in which the entry for the"word" column is equal to any of our stopwords.
+
+In R, the exclamation point "!" means "not". So we are returning all rows such that are not those rows where "word" is in "nltk_subset".
+
+```{r}
+#             subset( my dataframe, !( column with words %in% list of stopwords))
+marx_clean <- subset(cm_word_per_line, !(word %in% nltk_stopwords))
+count(marx_clean,word,sort=TRUE)
+```
+
+How very Marxist! We have already distilled out some of the major concepts from the Communist Manifesto by simply looking at word frequency after filtering out stopwords.
+
+## Comparing Two Texts
+
+Let's now do the same with Adam Smith's Wealth of Nations for comparison. Its ID number is 3300.
+
+```{r}
+smith<-gutenberg_download(3300)
+smith_word_per_line <- unnest_tokens(smith,output=word,input=text,token="words")
+smith_clean <- subset(smith_word_per_line, !(word %in% nltk_stopwords))
+count(smith_clean,word,sort=TRUE)
+
+```
+
+We see a very different list of words. Some of them we might want to remove as "stopwords," such as "upon" or "would." But looking through the first few rows, we find a number of informative terms, such as "trade" and "price," which were not top terms for Marx. How might we do a more systematic comparison? We could calculate the differences in frequencies for words between the Communist Manifesto and Wealth of Nations, but Wealth of Nations is much longer, and therefore all its frequencies will be higher. Better alternatives would be to rank each word's frequency and compare ranks, or to calculate the prevalence of each word as a percentage (which percentage of the words are "price").
+
+Let's do both. First, we will save our marx frequency and smith frequency outputs as new dataframes. We will then create new columns for ranks and proportions. We use the rank() command to create a column of rank orderings of the frequency column (n). For whatever reason, it ranks things smallest to largest, so we reverse it by calculating rank (-1\*marx_freq\$n)
+
+```{r}
+marx_freq <- count(marx_clean,word,sort=TRUE)
+smith_freq <- count(smith_clean,word,sort=TRUE)
+
+##Calcualte rank of each word
+marx_freq$marx_rank<-rank(-1*marx_freq$n)
+smith_freq$smith_rank<-rank(-1*smith_freq$n)
+
+##Calculate percent occurrence of each word
+marx_freq$marx_pcnt <- marx_freq$n / sum(marx_freq$n)
+smith_freq$smith_pcnt <- smith_freq$n / sum(smith_freq$n)
+
+View(marx_freq)
+```
+
+We could try to calculate the correlation right now between marx_freq\$marx_rank and smith_freq\$smith_rank right now, but it would give us an error or erroneous results for two reasons. First, we have a different number of rows in marx_freq and smith_freq because the books have different sized vocabularies. Second, the cor() function in R will simply correlate row 1 with row 1, row 2 with row 2, etc. But this means that the value for "class" in max_freq will be compared with "upon" in smith_freq.
+
+To fix these problems, we will want to merge together these columns into a single dataframe. We want one column that is "words" and have one attribute for word that is "marx_rank" and another attribute for each word that is "smith_rank." Then the columns will be directly comparable.
+
+```{r}
+## merge( first dataframe, second dataframe, by = column used to match them)
+marx_smith_merge <- merge(marx_freq,smith_freq, by='word', all=FALSE)
+
+View(marx_smith_merge)
+```
+
+Note that marx_freq and smith_freq have different vocabularies with some overlapping words and some non-overlapping words. We could specify with the merge() function whether we want to keep the non-overlapping words or not by adding a "all =TRUE", but we will exclude that for the time being.
+
+```{r}
+cor(marx_smith_merge$marx_rank,marx_smith_merge$smith_rank)
+cor(marx_smith_merge$marx_pcnt,marx_smith_merge$smith_pcnt)
+
+```
+
+We find that both our correlations are around 0.2. This is surprisingly low given that these are both texts on political economy. What makes them so different?
+
+```{r}
+#Let's calculate the difference in percent
+marx_smith_merge$pcnt_diff<-marx_smith_merge$marx_pcnt - marx_smith_merge$smith_pcnt
+
+marx_smith_merge_sort<-arrange(marx_smith_merge,pcnt_diff)
+
+View(marx_smith_merge_sort)
+head(marx_smith_merge_sort[,'word'],n=10)
+tail(marx_smith_merge_sort[,'word'],n=10)
+
+```
+
+## Comparing Multiple Texts: tf-idf
+
+Suppose we want to identify words that appear within a single document disproportionately compared to a whole set of documents. The technique used to find key words within documents among a whole set of documents is called "tf-idf" which stands for "term frequency -- inter-document frequency". The idea is to score words high that have high frequency *within* a document and low frequency *between* documents. In other words, these are words that are generally rare in the corpus, but common within a given document.
+
+For each word in each document, its tf-idf score is the product of the term's frequency within that document and its inter-document score (idf) across all documents. Essentially, tf-idf takes term frequency and weights it according to how prevalent the term is across documents.
+
+\
+$$ tf\text{-}idf = frequency(term) * idf(term) $$
+
+There are a number of variants on tf-idf, but the conventional form uses raw term frequency as "tf" and measures inter-document frequency (idf) as the natural log of the number of documents divided by the number of documents containing the term.
+
+$$ idf(term)=ln(\frac{n_{documents}}{n_{documents\ containing\ the\ term}}) $$
+
+This means that if a term occurs in all documents, the "idf" score is $ln(1) = 0$. Therefore the tf-idf score is $tf * 0 = 0$. Whereas, if the term only occurs in 1 out of 100 docs, its idf score is $ln(100/1) = 4.6$. Thus, the tf-idf score is $tf * 4.6$
+
+But notice that in this measure, the denominator is simply "number of documents containing the term." It does not incorporate how frequent the term is in other documents.
+
+Let's download a whole set of works by Marx. We can use tf-idf to quickly assess the topical differences of these works. I found five works by Marx on Project Gutenberg and copied each of their ID numbers into the field.
+
+```{r}
+marx_books <- gutenberg_download(c(61,1346,32370,32966,46423),meta_fields="title")
+marx_word_by_row <- unnest_tokens(tbl=marx_books, input=text, output=word)
+### count( dataframe , column to group by , column of text, sort = TRUE)
+marx_books_freq <- count(marx_word_by_row, title, word, sort = TRUE)
+
+```
+
+The bind_tf_idf function from "tidytext" automates the process of calculating tf-idf scores for each word for each book.
+
+```{r}
+marx_tf_idf <- bind_tf_idf(tbl = marx_books_freq, 
+                           term=word, 
+                           document = title, 
+                           n=n)
+```
+
+I stole this script from the Data Mining in R text assigned reading. Let's try to decipher what's going on, and see the results it spits out.
+
+```{r}
+marx_tf_idf %>%
+  group_by(title) %>%
+  slice_max(tf_idf, n = 5) %>%
+  ungroup() %>%
+  ggplot(aes(x=tf_idf, y=word, fill = title)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~title, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL) + 
+  theme(strip.text.x = element_text(size = 7))
+```
+
+Within a few seconds, we were able to load in five works by Karl Marx and extract some key differences in the topics that they cover. What are some of the other things that we might be able to do to understand about these works and their differences using text as data?
+
+-   Are concepts constructed differently? For example, does Marx describe "markets" differently than Smith?
+
+-   Do words carry different connotations (negative or positive) between the works?
+
+-   How similar are these texts to other texts on political economy that followed? Can we quantify influence by calculating textual similarity?
+
+On Wednesday we will continue our foray into text analysis by looking at relationships between words!

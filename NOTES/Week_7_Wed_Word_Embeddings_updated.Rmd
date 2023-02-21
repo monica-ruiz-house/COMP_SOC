@@ -1,0 +1,219 @@
+---
+title: 'Advanced Text Analysis: Word Embeddings'
+author: "Austin Kozlowski"
+date: "2023-02-14"
+output: html_document
+---
+
+# Advanced Text Analysis: Word Embeddings
+
+Last week we discussed how to use the context surrounding at term to learn more about its meaning and its usage in a text. Today we will learn about Word Embedding models, a sophisticated method of deriving a great deal of semantic information from a word's shared context across all its uses in a large corpus.
+
+A word embedding model is a geometric model of text that represents words as points in a point cloud (or more technically, vectors in a vector space). In a word embedding model, words are positioned close together if they are used in similar contexts, and are placed far apart if they appear in very different contexts.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/embedding1.png){width="722"}
+
+We see here a 3D projection of a word embedding model. We are specifically looking at the word "catholics" and highlighting all the words that are closest to it in the model. We see on the right hand side the list of the words closest in the space: protestants, catholic (singular), christians, etc. As we move farther down we see a wider variety of words like "churches", "denominations," and "clergy." Yet farther we have "pope," "orthodox," and "saints." This collectively gives us a rich understanding of the terms that are associated with "catholics."
+
+Let's spend a moment playing with an [interactive embedding model here](https://projector.tensorflow.org/). Keep in mind that, while this representation is 3-dimensional so we can view it on our screens, the actual embedding model would be 200-300 dimensional. Higher dimensionality allows for a more complex set of similarities and differences to be preserved. For example, maybe "roman" should be close to "catholic" but far from "protestant", even though "catholic" is close to "protestant". This can be best achieved with high dimensionality.
+
+So what exactly is going on here? How is an embedding model constructed?
+
+## High dimensional semantic spaces
+
+Very much like a topic model, a word embedding model takes as its input a large collection of digitized texts. Unlike a topic model, we do not learn differences about "documents" during training. The whole text is aggregated together into a single representation.
+
+The output of a word embedding algorithm is a matrix with 1 row for each word in the vocabulary and approximately 300 columns, representing each word's position in the space.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/w2v_input_output.png)
+
+Thinking about distance within a 300-dimensional space may sound daunting, but it's really just a mathematical extension of regular distance in 2D or 3D. In two dimensions, each point is specified by two coordinates: its position on the x-axis and its position on the y=axis. In three dimensional space, points have three coordinates, (x,y,z). Three hundred dimensional space is the same idea, but with 300 coordinates.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/distance_formula.png){width="407"}
+
+In the natural language processing (NLP) world, we typically do not describe the positions in space as "points," but as "vectors." Honestly, there is very little difference here -- a word vector is just a set of coordinates that specifies the word's location in the vectors space. So in the case above, the vector would have a length of 300.
+
+One subtle difference between points and vectors is that we can calculate the angle between vectors. Indeed, the most common way to measure similarity in the embedding space is by taking the cosine of the angle between the word vectors. This is referred to as "cosine similarity."
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/cosine_sim.png)
+
+The most prominent word embedding algorithm is called word2vec (because it turns words into vectors!). The goal of word2vec is to position words in a vector space such that *words that have similar **contexts** are located close together*. This does not mean that words that co-occur appear close together (although they often do in practice). For instance, the word "fantastic" may appear in similar contexts as "great" -- (e.g. you did a \_\_\_\_\_\_\_ job. It was a \_\_\_\_\_\_\_\_\_ performance). Therefore, "great" and "fantastic" will appear close together in the space, even if "great" and "fantastic" rarely occur within the same phrase. In brief, word2vec groups together words that are "substitutes" rather than "complements."
+
+A perhaps unexpected consequence of this is that words are often very close to their opposites, because opposites often appear in similar contexts (you did a **great** job vs. you did a **terrible** job --- or "he drives too **fast"** vs."he drives too **slow**"). Thus, opposites are not on opposite ends of the space. Rather, they are often very close together.
+
+## Training a word2vec model
+
+Word2vec reads through the large text file that is input word-by-word, using a sliding context window. The analyst specifies the size of the context window, but it is usually somewhere between 3 to 15 words in size.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/context_window.png){width="501"}
+
+For each center word, the algorithm performs a prediction task. Either (a) it uses the center word to try to predict the surrounding words, or (b) it uses the surrounding words to predict the center word -- both produce similar models.
+
+At the very beginning of training, the model is randomly initialized. In other words, each word is given a random position in the space. Therefore, the initial predictions are sure to be way off. However, after each prediction, the position of the words in the embedding space is updated so that if the same prediction were done again, it would be more accurate.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/w2v_prediction.png)After each prediction, the context window slides to the next word and attempts to predict that word given its context. It will probably get that one wrong too, but it will adjust the position of the vectors according to their errors. The model slides through the entire document, making potentially millions of predictions based on context words. Much like the deep neural network models we examined previously, word2vec can also iterate over the entire text multiple times, or epochs. After sufficient training, words will be positioned in the space such that they are nearby other words that share similar contexts.
+
+This is a basic overview and simplification of exactly what word2vec does. If you want to take a deeper dive, read through the excellent [Illustrated Word2Vec tutorial](https://jalammar.github.io/illustrated-word2vec/) that is linked for this week in the syllabus.
+
+Let's begin by opening a couple word embedding models I trained on the Google Ngram corpus. Google digitized millions of books, mostly from academic libraries, as part of the Google Books project. Many of these books are under copyright, but Google was able to publicly release the texts broken into ngrams, with their associated frequencies by year. While the texts are not readable by humans in this form, they can still provide useful information about how words changed their contexts over time.
+
+```{r}
+t1<-read.csv("Z:/Winter_2023/Intro_to_Comp_Soc/w2v_1900s.csv",
+                 header=TRUE,
+                 row.names=1)
+
+
+t2<-read.csv("Z:/Winter_2023/Intro_to_Comp_Soc/w2v_1990s.csv",
+                 header=TRUE,
+                 row.names=1)
+
+
+## Added: I recommend running these lines first: 
+# they normalize all your vectors so they are all length= 1,
+# which tends to improve results
+
+#calculate size (norm) of vector
+norm_vec <- function(x) sqrt(sum(x^2))
+nrm <- function(x) x/norm_vec(x)
+t1<-t(apply(t1,1,nrm))
+t2<-t(apply(t2,1,nrm))
+```
+
+To compare the distances between words, we have to create a function for cosine similarity. The equation for the cosine of the angle $\theta$ between two vectors A and B is given below. We recreate this function ourselves, then use it to calculate the similarity between word vectors in each of our two embeddings.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/cosine.png)
+
+Keep in mind, **you cannot calculate the cosine similarity between words from two different embeddings!** It does not make mathematical sense to calculate the similarity between a word in time1 and a word in time2. The best we can do is look at the word's neighbors and see whether they change. This is because word embeddings are purely relational models -- *the absolute location of a word in the space means nothing, the only meaningful information is its position relative other words in the same space.*
+
+```{r}
+#calculate size (norm) of vector
+norm_vec <- function(x) sqrt(sum(x^2))
+#Dot product#
+dot <- function(x,y) (sum(x*y))
+#Cosine Similarity#
+cos <- function(x,y) dot(x,y)/norm_vec(x)/norm_vec(y)
+
+
+cos(t1["war",],t1["culture",])
+cos(t2["war",],t2["culture",])
+
+cos(t1["gay",],t1["rights",])
+cos(t2["gay",],t2["rights",])
+```
+
+You can learn more about a word by looking at its nearest neighbors. Here's a function I wrote that prints out the top 10 nearest neighbors of a given vector.
+
+```{r}
+
+## Run this to define the top10() function
+top10 <- function(x,y){
+  full <- as.matrix(y) %*% (as.matrix(x))
+  data.frame(full[order(full*-1),][1:10])
+}
+
+## Let's look at words nearest to "culture" in 1900-1909
+
+vector <- t1["culture",]
+embedding <- t1
+top10(vector,embedding)
+
+## Now let's do the same for 1990-1999
+
+vector <- t2["culture",]
+embedding <- t2
+top10(vector,embedding)
+```
+
+But we can go beyond simply looking at proximity in the space. An early discovery of word embedding models is that they can complete analogies through simple algebra with the word vectors. The famous example is that by taking the *king* vector, adding the *woman* vector and subtracting the *man* vector, the resulting vector is closest to *queen*. In short: *king + woman - man = queen*.
+
+```{r}
+##Try it out by storing your analogy output vector as "analogy_out" and
+# feeding it into the top10 function.
+
+##
+analogy_out <- t1["king",] + (t1["woman",] -  t1["man",])
+
+vector <- analogy_out
+embedding <- t1
+top10(vector,embedding)
+
+########
+
+analogy_out <- t1["paris",]  + (t1["germany",] - t1["france",]) 
+
+vector <- analogy_out
+embedding <- t1
+top10(vector,embedding)
+
+######### We can also do syntactic analogies
+# chair is to chairs as mouse is to...
+
+analogy_out <- t1["mouse",]  + (t1["chairs",] - t1["chair",])
+
+vector <- analogy_out
+embedding <- t1
+top10(vector,embedding)
+
+```
+
+We can start to understand why this is the case by looking at how words are arranged in the space. Of course, we can't look directly at a 300 dimensional space, but here is a 2D summary (created using PCA).
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/capitals.png)
+
+We can see that the same "step" that takes us from Paris to France can take us from Portugal to Lisbon. Therefore, Portugal + (Paris - France) = Lisbon.
+
+We can extend this logic to identify dimensions of cultural association in word embeddings. The reason that *King + (Woman - Man) = Queen* is because *(Woman - Man)* takes us one step in the direction of words associated with "woman" and away from words associated with "man." In other words, it moves us towards words with feminized associations. Similarly, *(Man - Woman)* takes us one step towards words with masculine associations
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/gender_example.png)
+
+We can build more robust estimates of cultural dimensions by assembling a large set of antonym pairs that reflect the underlying dimension of cultural association. For instance, we can take *man - woman, boy - girl, him - her*, etc. and average these differences together to get a single averaged dimension of gendered difference.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/cultural_dims1.png)
+
+Then, once we have this averaged "cultural dimension," we can calculate its cosine similarity with other words, giving us an estimate of those word's gendered associations. *If you do (masculine terms - feminine terms) your outputs will be positive if they have a masculine association and negative if feminine. But if you do (feminine terms - masculine terms) positive outputs will signify feminine associations.*
+
+We can even project the same words on a variety of cultural dimensions, producing a rich profile of semantic associations for a set of terms.
+
+![](https://austinkozlowski.files.wordpress.com/2023/02/cultural_dims2.png)
+
+## Lab Session
+
+Let's see if we can calculate a gender dimension for the 1990s. What are some words that project more masculine? What are words that project more feminine?
+
+1.  Take differences between antonym pairs
+2.  Average those differences (mean)
+3.  Take cosine similarity of your word of interest with the average vector
+
+```{r}
+## 1. Take differences between antonym pairs
+
+pair1 <- t2["man",] - t2["woman",]
+pair2 <- t2["masculine",] - t2["feminine",]
+pair3 <- t2["men",] - t2["women",]
+pair4 <- t2["his",] - t2["hers",]
+
+## 2. Average those differences
+gender_dim <- (pair1 + pair2 + pair3 + pair4)/4
+
+## 3. Take cosine similarity of your word of interest with the ave. vector
+# Note: because we did (man - woman), positive results indicate masculine associations and negative results indicate feminine.
+# If we did (woman - man), positive results would indicate a feminine association.
+
+cos(t2["doctor",],gender_dim)
+cos(t2["nurse",],gender_dim)
+
+cos(t2["war",],gender_dim)
+cos(t2["peace",],gender_dim)
+
+
+## Lastly, we can see if there is change over time:
+pair1 <- t1["man",] - t1["woman",]
+pair2 <- t1["masculine",] - t1["feminine",]
+pair3 <- t1["men",] - t1["women",]
+pair4 <- t1["his",] - t1["hers",]
+
+gender_dim_t1 <- (pair1 + pair2 + pair3 + pair4)/4
+
+cos(t1["student",],gender_dim_t1)
+cos(t2["student",],gender_dim)
+```

@@ -1,0 +1,274 @@
+---
+title: 'Week 6: Text Analysis 2: Relations between Words'
+author: "Austin Kozlowski"
+date: "2023-02-08"
+output: html_document
+---
+
+# Text Analysis Pt 2: Relations between Words
+
+On Monday we worked through how we can turn text into data. We described some cleaning (or "preprocessing") we may want to do first (remove casing, remove punctuation, remove spaces, remove stopwords). We also found that a particularly useful structure is a dataframe with one word per row.
+
+We then demostrated what we can learn from looking at word frequencies. Frequencies can reveal the central concepts in a text. By converting frequencies to percents or ranks, we can then compare texts to identify differences in their focus. Using tf-idf, we can compare a document to a large collection of documents to identify what topics are disproportionately emphasized in a given document.
+
+While frequency-based approaches tell us much about which terms are important in a document, they cannot tell us what these terms mean in the text or how they are being used. To get at the meaning and usage of terms, we need to analyze the *relationships between words*.
+
+## Context
+
+To learn about a word, we must look at its context. The most basic, and most prevalent, way of conceptualizing context in text analysis is the set of words surrounding the word of interest. The size of this surrounding "context window" varies between studies and depends on your analytic interests. It could be an entire document (like a news article), it could be a paragraph, a sentence, or everything within "n" words of the key word.
+
+We will mostly focus on relatively small context windows, like 5-10 words, because this allows us to isolate those terms most relevant to our word of interest. To get at "local context," text analysts often divide text into units called "ngrams," which are sequences of words of a given length. For instance, a 5-gram is a 5 word sequence of words, a 2-gram is a two word sequence, etc.
+
+Let's break some text into ngrams. For our demos today, we are going to take a quantum leap from Karl Marx to Andrew Breitbart. From Canvas, you can download a file consisting of 1000 articles published on breitbart.com between 2016 and 2020.
+
+```{r}
+breitbart<-read.csv("Z:/Winter_2023/Intro_to_Comp_Soc/Week_6/breitbart_1000.txt",header=FALSE)
+
+nrow(breitbart)
+ncol(breitbart)
+
+breitbart[1:4,]
+```
+
+We see that each line is a whole article. We may want some way to retain the groupings of articles, so let's create an "article \#" column to keep track of where the words come from. Because we don't have rownames, our rownames are just numbers, so let's use those.
+
+```{r}
+breitbart$article<-rownames(breitbart)
+View(breitbart[1:4,])
+
+#Now that we have two columns, we should name our text column too.
+colnames(breitbart)<- c("text","article")
+View(breitbart[1:100,])
+```
+
+Now we can re-use our script from yesterday to turn this data into a one-word-per-line format.
+
+```{r}
+#we need tidytext to run the unnest_tokens function
+library("tidytext")
+
+## unnest_tokens(tbl    = your input data frame
+##               input  = the column name of your input from the tbl dataframe
+##               output = the column name for your output)
+
+#I use wpl as abbr for word-per-line
+breitbart_wpl <- unnest_tokens(tbl=breitbart, 
+                               input=text, 
+                               output=word, 
+                               token="words")
+View(breitbart_wpl[1:500,])
+```
+
+Looking good! Before getting into word relations, let's see if we can find the words with highest frequency in Breitbart (excluding stopwords). Take a minute to re-use the scripts from Monday to remove stopwords and find the top frequency words. (hint: you need dplyr to use count() )
+
+```{r}
+library("dplyr")
+library("stopwords")
+smart_stopwords<-stopwords(language ="en", source = "smart")
+breitbart_clean <- subset(breitbart_wpl, !(word %in% smart_stopwords))
+count(breitbart_clean,word,sort=TRUE)
+
+```
+
+But the goal today is to move beyond single word frequencies. One way to do this is to break our text into ngrams. Fortunately, the unnest_tokens function can do this for us automatically. We just need to replace token="words" with token="ngrams"
+
+```{r}
+#Set token to "ngrams", and add n = length of ngram
+bb_3gram_df<- unnest_tokens(tbl=breitbart, 
+                            input=text, 
+                            output=bb3gram, 
+                            token='ngrams',
+                            n=3)
+
+View(bb_3gram_df[1:20,])
+```
+
+## Structuring Ngram Data
+
+As we described before, it is best to have one word per entry in the matrix, and now we have three words per entry. One option is to give each 3gram its own row, and have three columns; word1, word2, and word3.
+
+The separate() command from the tidyr package can split a single column into multiple columns based on a delimiter (in our case, " ")
+
+```{r}
+#install.packages("tidyr")
+library("tidyr")
+bb_3gram_split<-separate(data=bb_3gram_df,
+                         col=bb3gram,
+                         into=c("word1", "word2", "word3"),
+                         sep = " ")
+
+View(bb_3gram_split[1:500,])
+```
+
+You shouldn't feel limited to only use pre-existing packages to analyze text. For instance, rather than use the separate() command, you could write code to create an ngram structured dataframe. Here is a short script that I wrote to achieve the same outcome using a for loop (*turns out it's really slow)*. What other ways could we create columns of context words?
+
+```{r}
+breitbart_wpl$word2<-NA
+breitbart_wpl$word3<-NA
+
+#for(n in 1:(nrow(breitbart_wpl)-50000)){
+for(n in 1:2000){
+  if(breitbart_wpl[n,"article"] == breitbart_wpl[n+1,"article"])
+  {word2=breitbart_wpl[n+1,"word"]}
+  else{word2="@"}
+  if(breitbart_wpl[n,"article"] == breitbart_wpl[n+2,"article"])
+  {word3=breitbart_wpl[n+2,"word"]}
+  else{word3="@"}
+  breitbart_wpl[n,"word2"] = word2
+  breitbart_wpl[n,"word3"] = word3
+}
+View(breitbart_wpl[1:500,])
+```
+
+Back to our analysis. Using our new contextual information, we can learn more about specific terms. Let's check our what some key actors do by reducing our data frame to 3grams that start with a name of interest.
+
+```{r}
+#We have used the subset function before, it preserves only the rows
+# of the dataframe meeting a stated condition. In this case word1 == "trump
+
+# subset(dataframe , column == value to subset on)
+trump_3grams<-subset(bb_3gram_split, word1=="trump")
+View(trump_3grams[1:50,])
+count(trump_3grams,word2,sort=TRUE)
+```
+
+There are a lot of stopwords here. We might learn more by filtering them out. Unfortunately, the script we used on Monday to remove stopwords required the one-word-per-line format. Given that we are working with ngrams, we would need to remove the stopwords before breaking into word-per-line format. This is a somewhat challenging task...so I just googled to see if someone already wrote a script for it. [Sure enough, there was a super helpful script](https://stackoverflow.com/questions/15253798/r-remove-stopwords-from-a-character-vector-using-in). Google, and especially StackOverflow is your friend while coding!
+
+```{r}
+##In this code block, we remove stopwords from the original dataframe, before
+##breaking into ngrams
+
+library("stopwords")
+stopwords<-stopwords(language ="en", source = "smart")
+
+#Define new "not in" function#
+'%nin%' <- Negate('%in%')
+
+#input list of full texts
+list_of_texts<-breitbart[,1]
+
+#Break text into words, remove stop words, then reassemble#
+breitbart$cln_text<- lapply(list_of_texts, function(x) { 
+                      t <- unlist(strsplit(x, " "))
+                      wordlist<- t[t %nin% stopwords]
+                      paste(wordlist, collapse = ' ')
+                       })
+
+
+View(breitbart[1:5,])
+
+##Now that we have removed stopwords, divide into 1 3gram per line
+bb_3gram_clean<- unnest_tokens(tbl=breitbart, 
+                               input=cln_text, 
+                               output=bb3gram, 
+                               token='ngrams',
+                               n=3)
+
+View(bb_3gram_clean[1:5,])
+
+
+##Now we have 1 3gram per line, divide them into 3 columns: word1, word2, word3
+bb_3gram_cln_split<-separate(data=bb_3gram_clean,
+                             col=bb3gram,
+                             into=c("word1", "word2", "word3"), 
+                             sep = " ")
+
+#bb_3gram_cln_split is now our 3gram dataframe without stopwords
+View(bb_3gram_cln_split[1:6,])
+
+```
+
+Now that we have removed stopwords, let's once again reduce our data frame to 3grams starting with "trump"
+
+```{r}
+trump_cln_3grams<-subset(bb_3gram_cln_split, word1=="trump")
+count(trump_cln_3grams,word3,sort=TRUE)
+```
+
+## Lab session
+
+1.  Most common words (without stopwords) distance 1 or 2 *after* trump
+
+    ```{r}
+    trump_cln_3grams<-subset(bb_3gram_cln_split, word1=="trump")
+    count(trump_cln_3grams,word2,sort=TRUE)
+    count(trump_cln_3grams,word3,sort=TRUE)
+    ```
+
+2.  Most most common words distance 1 or 2 *before* trump?
+
+    ```{r}
+    ## set word3 == "trump", then see what's in positions word1 and word2
+    trump_cln_3grams<-subset(bb_3gram_cln_split, word3=="trump")
+    count(trump_cln_3grams,word2,sort=TRUE)
+    count(trump_cln_3grams,word1,sort=TRUE)
+    ```
+
+3.  Could we combine frequencies of words 1 before and 1 after "trump"
+
+    ```{r}
+    # set word2 to "trump" so we can see the following and preceding word
+    trump_mid<-subset(bb_3gram_cln_split, word2=="trump")
+
+    #calculate the frequencies for each, because we want to sum their frequencies
+    preceding_words <- count(trump_mid,word1,sort=TRUE)
+    following_words <- count(trump_mid,word3,sort=TRUE)
+
+    colnames(preceding_words)
+    colnames(following_words)
+    ```
+
+    *Now that we have frequency counts for the preceding and following word, we need to **merge them into one data frame**. However, the column we are merging by (the way the two dataframes are lined up) have different names. Specifically, we are merging by word, but in one preceding_words it is called "word1" and in "following_words" it is called "word3". We can either (a) rename the columns the same name, or, (b) specify the column names for the merge in the merge command. You can find how to do that by googling "how to merge different column names r". [I found this](https://www.r-bloggers.com/2012/12/joining-2-r-data-sets-with-different-column-names/).*
+
+```{r}
+freq_merge <- merge(preceding_words,following_words,
+                     by.x="word1",
+                     by.y="word3")
+View(freq_merge)
+
+##Or we could change the column names to match
+### We can change the name of the "n" column to whatever we want, because those remain separate
+colnames(preceding_words) <- c("word","preceding_freq")
+colnames(following_words) <- c("word","following_freq")
+freq_merge <- merge(preceding_words,following_words)
+View(freq_merge)
+```
+
+*The one problem with this is that we have merged only on those words that appear in both dataframes, that is, words that both precede and follow "trump" at least once. Looking at the documentation for the merge() function, we find that we can get all cases by setting all="TRUE"*
+
+```{r}
+freq_merge <- merge(preceding_words,following_words,all=TRUE)
+View(freq_merge)
+```
+
+*But now we have a bunch of NA cells! If you add a number by NA, you get NA. So we need to replace NA with 0. Once again, a [quick google revealed this](https://stackoverflow.com/questions/8161836/how-do-i-replace-na-values-with-zeros-in-an-r-dataframe).*
+
+```{r}
+freq_merge[is.na(freq_merge)] <- 0
+View(freq_merge)
+```
+
+*Now we simply create a new column summing together the frequencies!*
+
+```{r}
+freq_merge$freq_sum <- freq_merge$preceding_freq + freq_merge$following_freq
+View(freq_merge)
+
+#We can sort by frequency using the arrange() function from dplyr
+#For reasons I'll never understand, it sorts from low-to-high.
+#So to get descending order, we have to multiply by negative 1 in our command
+
+##            arrange(dataframe , -1 * column to sort by)
+freq_merge <- arrange(freq_merge,-1*freq_sum)
+View(freq_merge)
+
+## We can also use the order() command available in base R.
+# but its synatax is even more confusing...
+
+freq_merge <- freq_merge[order(-1*freq_merge$freq_sum),]
+View(freq_merge)
+```
+
+4.  How would we compare the contexts of two different words? say, "clinton" or "cruz"?
+
+To do this systematically, you would rerun the same analyses with a different key word (like "clinton"). Then you would merge the "clinton" results with the "trump" results. You would want to convert raw frequencies to percents so they are more comparable. Then you could calculate the differences between the percents, or the correlation between them. This simply involves adapting the scripts featured above and on Monday, so I'll leave it to you to figure out how to put them all together :)
