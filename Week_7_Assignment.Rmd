@@ -9,36 +9,53 @@ output: word_document
 
 1.  Load in the New York Times and Breitbart text files that we used for last week's assignment. Combine the two data frames using the row bind function "rbind()" so that they are in the same data frame. Remove stopwords using the script included below. Assign each article a unique article number.
 
-```{r}
-# Load necessary libraries 
+```{r, message = FALSE}
+# Load necessary libraries and set up for removal of stopwords
 library(tidyverse)
+library(stopwords)
+
+# Load our data and restructure it 
 working_dr <- getwd()
-breitbart <- read_csv(paste0(working_dr, "/download-2.html"))
-ny_times <- read_csv(paste0(working_dr, "/download.html"))
-```
+breitbart <- read_csv(paste0(working_dr, "/breitbart_1000.txt"))
+    breitbart$article <- rownames(breitbart)
+    colnames(breitbart)<- c("text","article_id")
+nytimes <- read_csv(paste0(working_dr, "/nytimes_1000.txt"))
+    nytimes$article <- rownames(nytimes)
+    colnames(nytimes)<- c("text","article_id")
+    
 
-``` {r}
-library("stopwords")
-stopwords<-stopwords(language ="en", source = "smart")
-
-#Append extra stopwords to remove common header/footers for nyt and breitbart
-stopwords<-append(stopwords,c("mr","ms","new","york","times","breitbart","follow","twitter","facebook"))
-
-#Define new "not in" function#
-'%nin%' <- Negate('%in%')
-
+#Define new "not in" function and define stop words
+  '%nin%' <- Negate('%in%')
 #input list of full texts
-list_of_texts<-breitbart[,1]
+  bb_texts<-breitbart[ ,1]
+  ny_texts<-nytimes[ ,1]
+  letra<-stopwords(language ="en", source = "smart")
+  letra<-append(stopwords,c("mr","ms","new","york","times","breitbart","follow","twitter","facebook"))
 
-#Break text into words, remove stop words, then reassemble#
-breitbart$text<- lapply(list_of_texts, function(x) { 
+# Remove stopwords
+breitbart$text<- lapply(bb_texts, function(x) { 
                       t <- unlist(strsplit(x, " "))
-                      wordlist<- t[t %nin% stopwords]
+                      wordlist<- t[t %nin% letra]
                       paste(wordlist, collapse = ' ')
-                       })
+                      }) %>%
+            unlist()
+
+nytimes$text<- lapply(ny_texts, function(x) { 
+                      t <- unlist(strsplit(x, " "))
+                      wordlist<- t[t %nin% letra]
+                      paste(wordlist, collapse = ' ')
+                       }) 
+
+                   
 ```
+
 
 2.  Train a topic model with 10 topics on this dataframe (it may take several minutes, so be patient). Then use the "tidy()" command from the tidytext library to convert your LDA output into two data frames. One data frame should have each row represent a document and provide "gamma" values. The other should have each row represent a word and have "beta" values.
+
+```{r}
+
+```
+
 
 3.  Use the following code block to visualize the words with the highest beta values for each topic. Then, for one topic that you find unclear, print out the words with the top 20 highest beta values. Then come up with a label for each topic. You do not need to insert this into your code, just list them here in text: (e.g. Topic 1 = "Sports", Topic 2 = "Crime")
 
@@ -62,8 +79,22 @@ breitbart$text<- lapply(list_of_texts, function(x) {
 
 4.  Next, we want to see whether some topics are more prevalent in NYT than in Breitbart. For each periodical, make a bar chart that shows the mean Gamma value for each topic. Which topics show the greatest difference in prevalence between Breitbart and NYT? (just at a glance, no formal test necessary). +1 Extra credit if you are able to label your bar chart with the topic names you wrote for the last question (hint -- you will need to recode the values of the topic variable. Look into mutate() and recode() commands).
 
+```{r}
+
+```
+
 5.  Okay, no more NYT and Breitbart! Now load in the word embeddings trained on Google Ngrams from 1900-1909 and from 1990-1999. How many rows are in each embedding? What does that mean? How many columns? What does that mean?
+```{r}
+
+```
 
 6.  Pick a word that you think may have changed its connotations over the 20th century. Calculate the cosine similarity between that word and several other relevant words. Do you find evidence for the cultural/linguistic change that you hypothesized?
+```{r}
+
+```
 
 7.  Next, let's identify a "gender dimension" in each embedding space. Take 4 antonym word pairs that can serve as poles for an analysis of gendered associations (e.g. "man" and "woman"). For each pair, take the difference of their word vectors, then average these together to create a "gender dimension". Now use cosine similarity to calculate projections on the gender dimension. Try to find two words that substantially change their projection (by at least 0.05) on the gender dimension between the 1900s and 1990s. (Worth 2 points).
+```{r}
+
+```
+
