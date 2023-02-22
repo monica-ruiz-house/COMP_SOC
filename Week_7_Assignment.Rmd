@@ -13,40 +13,34 @@ output: word_document
 # Load necessary libraries and set up for removal of stopwords
 library(tidyverse)
 library(stopwords)
+library(tidytext)
+
 
 # Load our data and restructure it 
 working_dr <- getwd()
 breitbart <- read_csv(paste0(working_dr, "/breitbart_1000.txt"))
     breitbart$article <- rownames(breitbart)
-    colnames(breitbart)<- c("text","article_id")
+    colnames(breitbart)<- c("text","article")
 nytimes <- read_csv(paste0(working_dr, "/nytimes_1000.txt"))
     nytimes$article <- rownames(nytimes)
-    colnames(nytimes)<- c("text","article_id")
+    colnames(nytimes)<- c("text","article")
+    nytimes$article <- seq.int(nrow(nytimes)) + 1000
+# Since we will later be be merging by row, need to distinguish between NYT & breitbart
     
-
-#Define new "not in" function and define stop words
-  '%nin%' <- Negate('%in%')
 #input list of full texts
   bb_texts<-breitbart[ ,1]
   ny_texts<-nytimes[ ,1]
   letra<-stopwords(language ="en", source = "smart")
   letra<-append(stopwords,c("mr","ms","new","york","times","breitbart","follow","twitter","facebook"))
 
-# Remove stopwords
-breitbart$text<- lapply(bb_texts, function(x) { 
-                      t <- unlist(strsplit(x, " "))
-                      wordlist<- t[t %nin% letra]
-                      paste(wordlist, collapse = ' ')
-                      }) %>%
-            unlist()
+# Remove stopwords:
+  # I have replaced the provided script with my own
+  # (previous script wasn't converted back to character type)
+clean_nytimes <- nytimes %>%
+  unnest_tokens(word, article) 
 
-nytimes$text<- lapply(ny_texts, function(x) { 
-                      t <- unlist(strsplit(x, " "))
-                      wordlist<- t[t %nin% letra]
-                      paste(wordlist, collapse = ' ')
-                       }) 
-
-                   
+# Merge  both dataframes together with rbind
+merged_df <- rbind(clean_nytimes, clean_breitbart)
 ```
 
 
