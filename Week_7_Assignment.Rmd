@@ -7,13 +7,17 @@ output: word_document
 
 **Thank you so much for the extension! I have started saving my files on git, so if someone happens to break my laptop again, I have all my work saved in the cloud.**
 
+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
+
 1.  Load in the New York Times and Breitbart text files that we used for last week's assignment. Combine the two data frames using the row bind function "rbind()" so that they are in the same data frame. Remove stopwords using the script included below. Assign each article a unique article number.
 
-```{r, message = FALSE}
-# Load necessary libraries and set up for removal of stopwords
+I.A - Load libraries and restructure data
+```{r, message = FALSE, warning = FALSE}
+# Load necessary libraries 
 library(tidyverse)
 library(stopwords)
 library(tidytext)
+library(topicmodels)
 
 
 # Load our data and restructure it 
@@ -24,30 +28,63 @@ breitbart <- read_csv(paste0(working_dr, "/breitbart_1000.txt"))
 nytimes <- read_csv(paste0(working_dr, "/nytimes_1000.txt"))
     nytimes$article <- rownames(nytimes)
     colnames(nytimes)<- c("text","article")
+# Distinguish between NYT & breitbart
     nytimes$article <- seq.int(nrow(nytimes)) + 1000
-# Since we will later be be merging by row, need to distinguish between NYT & breitbart
-    
+
 #input list of full texts
   bb_texts<-breitbart[ ,1]
   ny_texts<-nytimes[ ,1]
-  letra<-stopwords(language ="en", source = "smart")
-  letra<-append(stopwords,c("mr","ms","new","york","times","breitbart","follow","twitter","facebook"))
-
-# Remove stopwords:
-  # I have replaced the provided script with my own
-  # (previous script wasn't converted back to character type)
-clean_nytimes <- nytimes %>%
-  unnest_tokens(word, article) 
-
-# Merge  both dataframes together with rbind
-merged_df <- rbind(clean_nytimes, clean_breitbart)
 ```
 
+I.B - Removal of Stop Words
+``` {r}
+  letra1<-stopwords(language ="en", source = "smart")
+  custom_stopwords<-append(letra1, c("mr","ms","new","york","times","breitbart","follow","twitter","facebook", "a", "p", "h", "s"))
+
+# Remove stopwords:
+#Define new "not in" function#
+'%nin%' <- Negate('%in%')
+
+#Break text into words, remove stop words, then reassemble
+nytimes$text<- lapply(ny_texts, function(x) { 
+                      t <- unlist(strsplit(x, " "))
+                      wordlist<- t[t %nin% custom_stopwords]
+                      paste(wordlist, collapse = ' ')
+                       })
+
+breitbart$text<- lapply(bb_texts, function(x) { 
+                      t <- unlist(strsplit(x, " "))
+                      wordlist<- t[t %nin% custom_stopwords]
+                      paste(wordlist, collapse = ' ')
+                       })
+
+# Merge  both dataframes together with rbind
+merged_df <- rbind(nytimes, breitbart)
+
+```
 
 2.  Train a topic model with 10 topics on this dataframe (it may take several minutes, so be patient). Then use the "tidy()" command from the tidytext library to convert your LDA output into two data frames. One data frame should have each row represent a document and provide "gamma" values. The other should have each row represent a word and have "beta" values.
 
+II. A - Calculate frequencies of word and train topic model
 ```{r}
+# Calculate the frequencies for each word and group by article
+merged_wpl<- unnest_tokens(tbl = merged_df,
+                        input = text,
+                        output = word, 
+                        token ='words') %>%
+  count(article, word)
 
+#cast_dtm(data, document, term, value,
+merged_dtm <- cast_dtm(data = merged_wpl,
+                    document = article,
+                    term = word,
+                    value = n)
+
+merged_lda <- LDA(merged_dtm, k = 10, control = list(seed = 1234))
+
+word_topics <- tidy(merged_lda, matrix = "beta")
+doc_topics <- tidy(merged_lda, matrix = "gamma")
+arrange(doc_topics, gamma)
 ```
 
 
@@ -79,6 +116,8 @@ merged_df <- rbind(clean_nytimes, clean_breitbart)
 
 5.  Okay, no more NYT and Breitbart! Now load in the word embeddings trained on Google Ngrams from 1900-1909 and from 1990-1999. How many rows are in each embedding? What does that mean? How many columns? What does that mean?
 ```{r}
+1900_1909 <- read_csv(paste0(working_dr,))
+1990_1999 <- read_csv(paste0(working_dr, )
 
 ```
 
@@ -91,4 +130,3 @@ merged_df <- rbind(clean_nytimes, clean_breitbart)
 ```{r}
 
 ```
-
